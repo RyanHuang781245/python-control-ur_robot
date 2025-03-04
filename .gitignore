@@ -6,4 +6,4 @@ __pycache__/
 # Jupyter Notebook
 test.ipynb
 .ipynb_checkpoints
-*.log
+claw_machine.log

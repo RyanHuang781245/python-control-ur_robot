@@ -9,18 +9,15 @@ UR5_PORT = 30002
 
 class ControlModule:
     def __init__(self):
-        self.state = "idle"  # 初始狀態
+        self.state = "idle"
         self.logger = logging.getLogger("ControlModule")
         self.socket_client = SocketClient(UR5_IP, UR5_PORT)
         self.socket_client.connect()
         self.command_generator = URScriptGenerator()
-        # 初始 TCP (x, y, z, rx, ry, rz) 值，依據實際初始位置設定
+        # 初始 TCP (x, y, z, rx, ry, rz) 值，依實際初始位置設定
         self.current_tcp = [0.279134293245, 0.045957778215, 0.218270318258, 2.216666768333, -2.213592243070, -0.007045821207]
 
     def compute_new_tcp(self, delta):
-        """
-        根據目前 TCP 與增量 delta 計算新目標 TCP (僅更新 x, y)
-        """
         new_tcp = self.current_tcp.copy()
         new_tcp[0] += delta[0]
         new_tcp[1] += delta[1]
@@ -31,43 +28,51 @@ class ControlModule:
         self.socket_client.send_command(ur_command)
 
     def handle_move_command(self, direction):
-        """
-        處理水平移動命令，先計算新 TCP,檢查是否在邊界範圍內
-        若合法則發送移動指令，否則返回錯誤訊息。
-        """
+        # 定義移動步長
+        step = self.command_generator.step
+        # 依據方向計算 x, y 的位移增量
         if direction == "forward":
-            delta = [self.command_generator.step, 0, 0]
+            delta = [step, 0, 0]
         elif direction == "backward":
-            delta = [-self.command_generator.step, 0, 0]
+            delta = [-step, 0, 0]
         elif direction == "left":
-            delta = [0, self.command_generator.step, 0]
+            delta = [0, step, 0]
         elif direction == "right":
-            delta = [0, -self.command_generator.step, 0]
+            delta = [0, -step, 0]
+        elif direction == "right_forward":
+            diag = step / 1.414
+            delta = [diag, -diag, 0]
+        elif direction == "right_backward":
+            diag = step / 1.414
+            delta = [-diag, -diag, 0]
+        elif direction == "left_forward":
+            diag = step / 1.414
+            delta = [diag, diag, 0]
+        elif direction == "left_backward":
+            diag = step / 1.414
+            delta = [-diag, diag, 0]
         else:
             return "未知指令"
 
         new_tcp = self.compute_new_tcp(delta)
-        print(new_tcp)
+        # 若目標 TCP 超出邊界，則返回錯誤訊息
         if not is_within_boundaries(new_tcp):
             self.logger.warning("Target TCP {} out of boundaries".format(new_tcp))
             return "指令超出邊界，無法執行"
 
-        # 更新目前 TCP 並發送指令
         self.current_tcp = new_tcp
         ur_command = self.command_generator.generate_move_command(direction)
         self.socket_client.send_command(ur_command)
         # response = self.socket_client.receive_response()
         # return "執行移動：" + direction + "，回傳：" + str(response)
+        return "執行移動"
 
     def handle_command(self, cmd):
-        """
-        根據傳入的 cmd(包含移動與抓取)，呼叫對應方法處理
-        """
         if self.state != "idle" and cmd != "stop":
             self.logger.warning("State {} not idle, command {} rejected".format(self.state, cmd))
             return "當前忙碌中，請稍後再試"
         
-        if cmd in ["forward", "backward", "left", "right"]:
+        if cmd in ["forward", "backward", "left", "right", "right_forward", "right_backward", "left_forward", "left_backward"]:
             self.state = "moving"
             result = self.handle_move_command(cmd)
         elif cmd == "grab":
@@ -76,6 +81,7 @@ class ControlModule:
             self.socket_client.send_command(ur_command)
             # response = self.socket_client.receive_response()
             # result = "執行抓取，回傳：" + str(response)
+            result = "執行抓取"
         elif cmd == "stop":
             self.state = "idle"
             ur_command = "stop"

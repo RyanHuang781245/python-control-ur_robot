@@ -1,3 +1,5 @@
+import math
+
 class URScriptGenerator:
     def __init__(self):
         # 固定參數，可根據需求調整
@@ -22,6 +24,18 @@ class URScriptGenerator:
             delta = [0, -self.step, 0]
         elif direction == "right":
             delta = [0, self.step, 0]
+        elif direction == "left_forward":
+            diag = self.step / math.sqrt(2)
+            delta = [diag, -diag, 0]
+        elif direction == "right_forward":
+            diag = self.step / math.sqrt(2)
+            delta = [diag, diag, 0]
+        elif direction == "left_backward":
+            diag = self.step / math.sqrt(2)
+            delta = [-diag, -diag, 0]
+        elif direction == "right_backward":
+            diag = self.step / math.sqrt(2)
+            delta = [-diag, diag, 0]
         else:
             delta = [0, 0, 0]
         
@@ -31,12 +45,16 @@ class URScriptGenerator:
         """
         return command
 
+
     def generate_grab_command(self):
         """
         生成抓取動作的 URScript 指令組合：先下降，再夾取，再上升
         """
-        descend = "movel(pose_trans(p, [0, 0, -0.1]), {}, {})".format(self.acceleration, self.speed)
+        descend = f"""
+        movel(pose_trans(get_actual_tcp_pose(), p[0, 0, 0.1, 0, 0, 0]), {self.acceleration}, {self.speed})
+        """
         grip = "set_digital_out(0, True)"
         ascend = "movel(pose_trans(p, [0, 0, 0.1]), {}, {})".format(self.acceleration, self.speed)
         command = "{}; {}; {}".format(descend, grip, ascend)
+        
         return command
